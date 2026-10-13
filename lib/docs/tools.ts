@@ -1,6 +1,15 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { fetchDocEntries, searchDocs } from './search.js';
+import { applyToolPolicy } from '../shared/tool-policy.js';
+
+/** The /mcp/docs server: shared by api/mcp/docs.ts and the tool-surface test. */
+export function createDocsServer(): McpServer {
+  const server = new McpServer({ name: 'respan-docs', version: '1.0.0' });
+  applyToolPolicy(server);
+  registerDocTools(server);
+  return server;
+}
 
 export function registerDocTools(server: McpServer): void {
   server.tool(

@@ -1,8 +1,6 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { registerDocTools } from '../../lib/docs/tools.js';
-import { applyToolPolicy } from '../../lib/shared/tool-policy.js';
+import { createDocsServer } from '../../lib/docs/tools.js';
 import { rewriteToolCallNames } from '../../lib/shared/tool-aliases.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -26,13 +24,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const server = new McpServer({
-      name: 'respan-docs',
-      version: '1.0.0',
-    });
-    applyToolPolicy(server);
-
-    registerDocTools(server);
+    const server = createDocsServer();
 
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,

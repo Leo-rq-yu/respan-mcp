@@ -290,7 +290,7 @@ For custom API endpoints, set the `RESPAN_API_BASE_URL` environment variable:
 ```bash
 npm run build        # Compile TypeScript
 npm run stdio        # Build and run in stdio mode
-npm run check        # Type-check src, tests and scripts, then run the tests
+npm run check        # Type-check the source, tests and scripts, then run the tests
 ```
 
 CI (`.github/workflows/ci.yml`) runs `npm ci`, `npm run check` and
@@ -302,12 +302,13 @@ merge.
 - the tool name;
 - the description length (Claude Code truncates past 2,048 characters);
 - that the input schema compiles;
-- the total `tools/list` size and which tools lack a title, against
+- the tool names, the total `tools/list` size (up to 10% growth is allowed)
+  and which tools lack a title (a new tool must have one), against
   `tests/fixtures/tool-surface.baseline.json`.
 
-If you add or change tools on purpose and the size check fails, run
-`npm run surface:update` and commit the new baseline with the change. The
-size diff then shows up in review.
+If you add, remove or rename tools, or grow the list past the allowance, the
+check fails: run `npm run surface:update` and commit the new baseline with the
+change, so the name and size diff show up in review.
 
 ### Local OAuth broker
 
