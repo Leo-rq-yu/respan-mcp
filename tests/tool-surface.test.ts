@@ -25,12 +25,11 @@ const IS_UPDATING_BASELINE = process.env.UPDATE_SURFACE_BASELINE === '1';
 /** Claude Code truncates tool descriptions past this length. */
 const MAX_DESCRIPTION_CHARS = 2_048;
 /**
- * Tools already over MAX_DESCRIPTION_CHARS when this check landed. The list
- * may only shrink: a tool leaves it when its description is cut down or the
- * tool is replaced (the generic workflow_* tools are due to become typed
- * monitor_/automation_/report_ tools).
+ * Tools allowed past MAX_DESCRIPTION_CHARS. Empty: no tool on either surface
+ * is over the limit. Add a name here only with a reason, and remove it once
+ * its description is cut down or the tool is gone.
  */
-const KNOWN_OVERLONG_DESCRIPTIONS = new Set(['workflow_create']);
+const KNOWN_OVERLONG_DESCRIPTIONS = new Set<string>();
 /** Claude's connector directory caps names at 64; lowercase snake_case is ours. */
 const TOOL_NAME_PATTERN = /^[a-z][a-z0-9_]{0,63}$/;
 /** tools/list may grow this much past the baseline before the check fails. */
