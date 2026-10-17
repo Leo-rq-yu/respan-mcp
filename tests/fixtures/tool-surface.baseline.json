@@ -1,6 +1,6 @@
 {
   "mcp": {
-    "tools_list_chars": 103165,
+    "tools_list_chars": 103305,
     "tool_names": [
       "behavior_grouped",
       "behavior_list",
@@ -9,12 +9,10 @@
       "behavior_settings_update",
       "behavior_summary",
       "behavior_timeseries",
-      "custom_behavior_analyze",
       "custom_behavior_create",
       "custom_behavior_delete",
       "custom_behavior_get",
       "custom_behavior_list",
-      "custom_behavior_suggest",
       "custom_behavior_update",
       "error_group_get",
       "error_group_list",
@@ -68,12 +66,10 @@
       "behavior_settings_update",
       "behavior_summary",
       "behavior_timeseries",
-      "custom_behavior_analyze",
       "custom_behavior_create",
       "custom_behavior_delete",
       "custom_behavior_get",
       "custom_behavior_list",
-      "custom_behavior_suggest",
       "custom_behavior_update",
       "error_group_get",
       "error_group_list",
