@@ -201,6 +201,7 @@ respan-mcp/
 │   │   └── tool-result.ts    # size budgets, internal-field stripping
 │   ├── production/
 │   │   ├── logs.ts           # log_list, log_get
+│   │   ├── filter-schema.ts  # log_filter_schema
 │   │   ├── traces.ts         # trace_list, trace_get
 │   │   ├── threads.ts        # legacy module, not publicly registered
 │   │   └── metrics.ts        # metric summaries, grouped rankings, user usage
