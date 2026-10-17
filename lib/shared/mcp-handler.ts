@@ -26,7 +26,7 @@ import {
 import { OAuthBroker, type ResolvedAccess } from '../oauth/broker.js';
 import { getOAuthConfig, type OAuthRealm } from '../oauth/config.js';
 import { InvalidAccessTokenError } from '../oauth/errors.js';
-import { isReadOnlySession, MCP_WRITE_SCOPE, SUPPORTED_SCOPES } from '../oauth/scopes.js';
+import { isReadOnlySession, MCP_READ_SCOPE, MCP_WRITE_SCOPE, SUPPORTED_SCOPES } from '../oauth/scopes.js';
 import { getSessionStore } from '../oauth/store-factory.js';
 import { SessionStoreUnavailableError } from '../oauth/store.js';
 import {
@@ -85,15 +85,18 @@ function canonicalPublicBaseUrl(): string {
   return (process.env.MCP_PUBLIC_BASE_URL || 'https://mcp.respan.ai').replace(/\/+$/, '');
 }
 
-function challenge(resourceMetadataPath: string): string {
-  return `Bearer resource_metadata="${canonicalPublicBaseUrl()}${resourceMetadataPath}"`;
+function challenge(resourceMetadataPath: string, scope?: string): string {
+  const scopeParam = scope ? `scope="${scope}", ` : '';
+  return `Bearer ${scopeParam}resource_metadata="${canonicalPublicBaseUrl()}${resourceMetadataPath}"`;
 }
 
+/** `scope` is set on a read-only URL, so a client asks for read scope only. */
 function sendUnauthorized(
   res: VercelResponse,
   resourceMetadataPath: string,
+  scope?: string,
 ): VercelResponse {
-  res.setHeader('WWW-Authenticate', challenge(resourceMetadataPath));
+  res.setHeader('WWW-Authenticate', challenge(resourceMetadataPath, scope));
   return res.status(401).json({
     jsonrpc: '2.0',
     error: { code: -32001, message: 'Unauthorized' },
@@ -138,31 +141,41 @@ function hiddenWriteToolCalls(
 
 /**
  * A tool error, not a protocol error, so the agent reads why and what to do.
- * `_meta["mcp/www_authenticate"]` lets ChatGPT offer the user a new consent.
+ * On a read-only consent, `_meta["mcp/www_authenticate"]` lets ChatGPT offer
+ * the user a new consent; on a read-only URL no consent can help, so the hint
+ * points at the full URL instead.
  */
-function insufficientScopeResult(toolName: string, resourceMetadataPath: string) {
+function insufficientScopeResult(
+  toolName: string,
+  resourceMetadataPath: string,
+  readOnlyEndpointPath?: string,
+) {
+  const error = {
+    code: 'insufficient_scope',
+    message: `${toolName} changes data, and this connection is read-only.`,
+    hint: readOnlyEndpointPath
+      ? `This server URL (${readOnlyEndpointPath}) only serves read-only tools. `
+        + 'To change data, the user must connect to the same URL without /readonly, '
+        + 'with an API key that can write or a new sign-in that ticks "Also allow changes". '
+        + 'Read-only tools keep working here.'
+      : 'Ask the user to reconnect Respan and tick "Also allow changes" on the '
+        + 'consent page. The page offers that option only when this client requests '
+        + 'write access. Read-only tools keep working without it.',
+    // No scope enables writes on a read-only URL.
+    ...(readOnlyEndpointPath ? {} : { required_scope: MCP_WRITE_SCOPE }),
+  };
   const scope = SUPPORTED_SCOPES.join(' ');
   return {
-    content: [{
-      type: 'text',
-      text: JSON.stringify({
-        error: {
-          code: 'insufficient_scope',
-          message: `${toolName} changes data, and this connection is read-only.`,
-          hint: 'Ask the user to reconnect Respan and tick "Also allow changes" on the '
-            + 'consent page. The page offers that option only when this client requests '
-            + 'write access. Read-only tools keep working without it.',
-          required_scope: MCP_WRITE_SCOPE,
-        },
-      }),
-    }],
+    content: [{ type: 'text', text: JSON.stringify({ error }) }],
     isError: true,
-    _meta: {
-      'mcp/www_authenticate': [
-        `Bearer error="insufficient_scope", scope="${scope}", `
-          + `resource_metadata="${canonicalPublicBaseUrl()}${resourceMetadataPath}"`,
-      ],
-    },
+    ...(readOnlyEndpointPath ? {} : {
+      _meta: {
+        'mcp/www_authenticate': [
+          `Bearer error="insufficient_scope", scope="${scope}", `
+            + `resource_metadata="${canonicalPublicBaseUrl()}${resourceMetadataPath}"`,
+        ],
+      },
+    }),
   };
 }
 
@@ -218,11 +231,18 @@ function sendWebResponse(
   res.status(response.status).send(response.body);
 }
 
+export type McpHandlerOptions = {
+  /** A /readonly URL: read-only tools only, whatever the credential allows. */
+  readOnlyEndpointPath?: string;
+};
+
 export function createMcpHandler(
   defaultBaseUrl: string,
   resourceMetadataPath: string,
   realm: OAuthRealm,
+  options: McpHandlerOptions = {},
 ) {
+  const challengeScope = options.readOnlyEndpointPath ? MCP_READ_SCOPE : undefined;
   return async function handler(req: VercelRequest, res: VercelResponse) {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0, s-maxage=0');
     res.setHeader('CDN-Cache-Control', 'no-store');
@@ -260,11 +280,11 @@ export function createMcpHandler(
         backendCredential = oauthAccess.backendAccessJwt;
         baseUrl = sdkBackendBaseUrl(config.realms[realm].backendBaseUrl);
       } else if (bearer?.startsWith('mcp_')) {
-        return sendUnauthorized(res, resourceMetadataPath);
+        return sendUnauthorized(res, resourceMetadataPath, challengeScope);
       } else {
         backendCredential = bearer || process.env.RESPAN_API_KEY;
         if (!backendCredential) {
-          return sendUnauthorized(res, resourceMetadataPath);
+          return sendUnauthorized(res, resourceMetadataPath, challengeScope);
         }
         const configuredBaseUrl = (
           realm === 'enterprise'
@@ -298,8 +318,10 @@ export function createMcpHandler(
         ? new Set(enabledToolsHeader.split(',').map((tool) => resolveToolName(tool.trim())).filter(Boolean))
         : undefined;
 
-      // API keys carry their own permissions, enforced by the backend.
-      const isReadOnly = oauthAccess ? isReadOnlySession(oauthAccess.session.scope) : false;
+      // API keys carry their own permissions, enforced by the backend; only a
+      // read-only URL narrows them here.
+      const isReadOnly = Boolean(options.readOnlyEndpointPath)
+        || (oauthAccess ? isReadOnlySession(oauthAccess.session.scope) : false);
       const telemetry = telemetryContext(realm, bearer, req.headers);
       const server = createServer(authenticatedClient, enabledTools, telemetry, isReadOnly);
       noteAliasedCalls(telemetry, req.body);
@@ -309,7 +331,7 @@ export function createMcpHandler(
         const responses = blockedCalls.map(({ id, name }) => ({
           jsonrpc: '2.0',
           id,
-          result: insufficientScopeResult(name, resourceMetadataPath),
+          result: insufficientScopeResult(name, resourceMetadataPath, options.readOnlyEndpointPath),
         }));
         return res.status(200).json(Array.isArray(req.body) ? responses : responses[0]);
       }
@@ -331,7 +353,7 @@ export function createMcpHandler(
           realm,
           oauthAccess.accessTokenHash,
         );
-        return sendUnauthorized(res, resourceMetadataPath);
+        return sendUnauthorized(res, resourceMetadataPath, challengeScope);
       }
       sendWebResponse(bufferedResponse, res);
     } catch (error) {
@@ -339,7 +361,7 @@ export function createMcpHandler(
         error instanceof InvalidAccessTokenError
         || (error instanceof Error && error.name === 'ZodError')
       ) {
-        return sendUnauthorized(res, resourceMetadataPath);
+        return sendUnauthorized(res, resourceMetadataPath, challengeScope);
       }
       if (error instanceof DisallowedBackendUrlError) {
         return res.status(400).json({

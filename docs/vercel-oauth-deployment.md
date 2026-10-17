@@ -111,6 +111,7 @@ An OAuth connection is read-only unless the user allows changes at consent.
 - API keys are not filtered here: the backend enforces each key's own permissions, and `["*:read"]` keys are read-only.
 - Sessions issued before scopes existed have no stored scope and keep full access until they expire (at most 30 days). Set `MCP_LEGACY_SCOPE=read` to make them read-only at once; any non-empty value does the same, so a typo fails closed.
 - A client that sends only scope values this server does not define (claude.ai sends `claudeai`) is treated like one that sent none, so the user can still allow changes.
+- `/mcp/readonly` and `/mcp/enterprise/readonly` serve only read-only tools for every credential. Each has its own protected-resource metadata, advertising `mcp:read` only. Authorizing against one requests `mcp:read` only and binds the token to the realm's `/mcp` resource, so the token is read-only on both URLs. A 401 from either read-only URL challenges with `scope="mcp:read"`. A code exchange or refresh that names the read-only resource is refused (`invalid_grant`) when the grant can write. A client that sends neither `resource` nor `scope` is indistinguishable from a `/mcp` sign-in and gets the normal consent.
 
 **Treat this change as roll-forward only.** A deploy from before scopes existed ignores the stored `scope`, so rolling back gives read-only sessions full access again.
 
