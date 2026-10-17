@@ -147,6 +147,12 @@ Workspace identity/selection and behavior detection settings require OAuth.
 Behavior settings writes resolve their target from the current session and replace
 only the disabled list. API keys remain project-bound.
 
+`log_list` and `trace_list` pages say what they cut: `returned`, and a
+`truncated` note when text was shortened or, as a last resort, the last rows
+were reduced to their IDs. IDs and names you can filter on are never
+shortened, so a row can always be read in full with `log_get` or `trace_get`.
+When paging, pass back the `start_time` and `end_time` the page reports.
+
 The public surface does not register automation, evaluator, grader, dataset,
 experiment, generic workflow or export-workflow tools. Their backend capabilities
 remain available internally and may be reused by a supported feature. Generic
