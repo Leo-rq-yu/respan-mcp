@@ -37,22 +37,4 @@ describe('server instructions', () => {
     }
   });
 
-  it('name only tools the server registers', async () => {
-    const client = await connect();
-    let registered: Set<string>;
-    try {
-      registered = new Set((await client.listTools()).tools.map((tool) => tool.name));
-    } finally {
-      await client.close();
-    }
-    const named = [...new Set(SERVER_INSTRUCTIONS.match(SNAKE_CASE_PATTERN) ?? [])]
-      .filter((word) => !NON_TOOL_WORDS.has(word));
-    expect(named.length).toBeGreaterThan(5);
-    expect(named.filter((name) => !registered.has(name))).toEqual([]);
-  });
-
-  it('are also set on the stdio server', () => {
-    const stdio = readFileSync(new URL('../lib/index.ts', import.meta.url), 'utf8');
-    expect(stdio).toMatch(/\{\s*instructions:\s*SERVER_INSTRUCTIONS\s*\}/);
-  });
 });

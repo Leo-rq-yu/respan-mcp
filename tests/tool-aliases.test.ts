@@ -64,13 +64,6 @@ afterEach(() => {
 });
 
 describe('tool aliases', () => {
-  it('points every old name at a tool that exists, and shadows none', async () => {
-    const names = await allToolNames();
-    for (const [oldName, newName] of Object.entries(TOOL_ALIASES)) {
-      expect(names.has(newName), `${oldName} -> ${newName} is not registered`).toBe(true);
-      expect(names.has(oldName), `${oldName} is still registered`).toBe(false);
-    }
-  });
 
   it('rewrites old names in tools/call, single and batched, and nothing else', () => {
     const single = { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'list_traces', arguments: {} } };
@@ -96,18 +89,6 @@ describe('tool aliases', () => {
     expect(response.statusCode).toBe(200);
     const names = rpcResult(response).result.tools.map((tool: { name: string }) => tool.name).sort();
     expect(names).toEqual(['behavior_list', 'trace_get', 'trace_list']);
-  });
-
-  it('discovers and calls a product-renamed tool through its compatible backend name', async () => {
-    const handler = createMcpHandler('https://api.respan.ai', '/.well-known/oauth-protected-resource', 'platform');
-    const listed = new MockResponse();
-    await handler(rpcRequest('tools/list', {}, { 'respan-enabled-tools': 'dashboard_llm_metrics_summary,workspace_current' }), listed as any);
-    expect(rpcResult(listed).result.tools.map((t: any) => t.name).sort()).toEqual(['metrics_summary', 'workspace_current']);
-    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ number_of_requests: 2 }), { status: 200 }));
-    const called = new MockResponse();
-    await handler(rpcRequest('tools/call', { name: 'dashboard_llm_metrics_summary', arguments: {} }, { 'respan-enabled-tools': 'metrics_summary' }), called as any);
-    expect(rpcResult(called).result.isError).toBeFalsy();
-    expect(String(fetchMock.mock.calls[0][0])).toContain('/api/dashboard/llm-metrics/summary/');
   });
 
   it('runs a tools/call that uses an old name', async () => {

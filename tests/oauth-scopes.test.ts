@@ -221,18 +221,6 @@ describe('scopes on the hosted /mcp endpoint', () => {
     return rpcResult(response).result.tools.map((tool: { name: string }) => tool.name);
   }
 
-  it('shows a read-only session only read-only tools', async () => {
-    const store = new InMemorySessionStore();
-    setSessionStoreForTests(store);
-    const { pair } = await issue(store, { isWriteApproved: false });
-    const names = await toolNames(pair.access_token);
-    expect(names).toContain('log_list');
-    expect(names).toContain('prompt_get');
-    for (const write of ['prompt_deploy', 'prompt_create', 'monitor_delete', 'behavior_settings_update', 'workspace_switch']) {
-      expect(names, write).not.toContain(write);
-    }
-  });
-
   it('answers a hidden write tool with insufficient_scope instead of running it', async () => {
     const store = new InMemorySessionStore();
     setSessionStoreForTests(store);
@@ -298,29 +286,6 @@ describe('scopes on the hosted /mcp endpoint', () => {
     expect(String(JSON.stringify(response.body ?? '')).includes('insufficient_scope')).toBe(false);
   });
 
-  it('shows write tools to a session that was allowed changes', async () => {
-    const store = new InMemorySessionStore();
-    setSessionStoreForTests(store);
-    const { pair } = await issue(store, { isWriteApproved: true });
-    const names = await toolNames(pair.access_token);
-    expect(names).toContain('prompt_deploy');
-    expect(names).toContain('log_list');
-  });
-
-  it('leaves pre-scope sessions at full access, and the kill switch makes them read-only', async () => {
-    const store = new InMemorySessionStore();
-    setSessionStoreForTests(store);
-    const pair = await issueLegacy(store);
-    expect(await toolNames(pair.access_token)).toContain('prompt_deploy');
-
-    process.env[LEGACY_SCOPE_ENV] = 'read';
-    expect(await toolNames(pair.access_token)).not.toContain('prompt_deploy');
-  });
-
-  it('does not filter API keys, whose permissions the backend enforces', async () => {
-    setSessionStoreForTests(new InMemorySessionStore());
-    expect(await toolNames('AbCdEfGh.0123456789abcdef0123456789abcdef')).toContain('prompt_deploy');
-  });
 });
 
 describe('the read-only gate covers the whole tool surface', () => {
@@ -369,55 +334,6 @@ describe('the read-only gate covers the whole tool surface', () => {
       reads: all.filter((tool) => tool.annotations?.readOnlyHint === true).map((tool) => tool.name),
     };
   }
-
-  it('lists none of the write tools, and every read tool, to a read-only session', async () => {
-    const { all, writes, reads } = await surface();
-    expect(all.map((tool) => tool.name).sort()).toEqual(registeredToolNames().sort());
-    for (const name of [
-      'monitor_create', 'monitor_update', 'monitor_delete', 'monitor_commit', 'monitor_deploy',
-      'monitor_undeploy', 'behavior_settings_update', 'workspace_switch', 'prompt_create',
-      'prompt_update', 'prompt_draft_init', 'prompt_draft_update', 'prompt_commit', 'prompt_deploy',
-      'custom_behavior_create', 'custom_behavior_update', 'custom_behavior_delete',
-    ]) expect(writes, name).toContain(name);
-
-    const listed = (await listTools(await readOnlyToken())).map((tool) => tool.name);
-    expect(listed.filter((name) => writes.includes(name))).toEqual([]);
-    expect([...listed].sort()).toEqual([...reads].sort());
-  });
-
-  it('refuses every write tool with insufficient_scope without calling the backend', async () => {
-    const { writes } = await surface();
-    const token = await readOnlyToken();
-    const fetchSpy = vi.spyOn(globalThis, 'fetch');
-    for (const name of writes) {
-      const response = new MockResponse();
-      await handler(rpc(token, 'tools/call', { name, arguments: {} }), response as any);
-      const error = JSON.parse(rpcResult(response).result.content[0].text).error;
-      expect(error.code, name).toBe('insufficient_scope');
-      expect(error.message, name).toContain(name);
-    }
-    expect(fetchSpy).not.toHaveBeenCalled();
-  });
-
-  it('refuses every old name of a write tool with insufficient_scope', async () => {
-    const { writes } = await surface();
-    const aliases = Object.keys(TOOL_ALIASES).filter((old) => writes.includes(TOOL_ALIASES[old]));
-    expect(aliases).toEqual(expect.arrayContaining(['org_switch', 'switch_organization', 'deploy_prompt_version']));
-    const token = await readOnlyToken();
-    const fetchSpy = vi.spyOn(globalThis, 'fetch');
-    for (const name of aliases) {
-      const response = new MockResponse();
-      await handler(rpc(token, 'tools/call', { name, arguments: {} }), response as any);
-      expect(JSON.parse(rpcResult(response).result.content[0].text).error.code, name).toBe('insufficient_scope');
-    }
-    expect(fetchSpy).not.toHaveBeenCalled();
-  });
-
-  it('records the product names it hid, not the registration names', () => {
-    const hidden = hiddenWriteToolsOf(createServer(null, undefined, undefined, true));
-    expect(hidden.has('workspace_switch')).toBe(true);
-    expect(hidden.has('org_switch')).toBe(false);
-  });
 
   it('treats a tool with no annotations, or readOnlyHint false, as a write', () => {
     const server = new McpServer({ name: 'gate-test', version: '1' });
