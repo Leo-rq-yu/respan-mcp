@@ -365,6 +365,9 @@ describe('the read-only gate covers the whole tool surface', () => {
     return Object.keys(server._registeredTools).filter((name) => name !== TOOL_RUN_NAME);
   }
 
+  /** The loops below call the handler once per write tool; CI runners are a few times slower than a laptop. */
+  const SURFACE_LOOP_TIMEOUT_MS = 30_000;
+
   /**
    * Every tool on the full surface, split by its own readOnlyHint (false or
    * missing = write). tool_run takes its hint from the session, so it is
@@ -406,7 +409,7 @@ describe('the read-only gate covers the whole tool surface', () => {
       expect(error.message, name).toContain(name);
     }
     expect(fetchSpy).not.toHaveBeenCalled();
-  });
+  }, SURFACE_LOOP_TIMEOUT_MS);
 
   it('refuses every old name of a write tool with insufficient_scope', async () => {
     const { writes } = await surface();
@@ -433,7 +436,7 @@ describe('the read-only gate covers the whole tool surface', () => {
       expect(JSON.parse(rpcResult(response).result.content[0].text).error.code, name).toBe('insufficient_scope');
     }
     expect(fetchSpy).not.toHaveBeenCalled();
-  });
+  }, SURFACE_LOOP_TIMEOUT_MS);
 
   it('records the product names it hid, not the registration names', () => {
     const hidden = hiddenWriteToolsOf(createServer(null, undefined, undefined, true));
