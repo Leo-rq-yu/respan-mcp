@@ -16,6 +16,7 @@ import {
   hiddenWriteToolsOf,
   removeWriteTools,
 } from './tool-policy.js';
+import { SERVER_INSTRUCTIONS } from './instructions.js';
 import { resolveToolName, rewriteToolCallNames } from './tool-aliases.js';
 import {
   instrumentToolCalls,
@@ -41,10 +42,10 @@ export function createServer(
   telemetry?: TelemetryContext,
   isReadOnly = false,
 ): McpServer {
-  const server = new McpServer({
-    name: 'respan',
-    version: '1.0.0',
-  });
+  const server = new McpServer(
+    { name: 'respan', version: '1.0.0' },
+    { instructions: SERVER_INSTRUCTIONS },
+  );
   applyToolPolicy(server);
   applyProductVocabulary(server);
   applyToolCatalog(server);
