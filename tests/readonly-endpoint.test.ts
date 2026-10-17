@@ -11,6 +11,9 @@ import { createMcpHandler } from '../lib/shared/mcp-handler.js';
 import readOnlyResourceMetadata from '../api/well-known/oauth-protected-resource-readonly.js';
 import enterpriseReadOnlyResourceMetadata from '../api/well-known/oauth-protected-resource-enterprise-readonly.js';
 
+// These tests cover the whole tool surface, not only the tools listed by default.
+process.env.RESPAN_MCP_LIST_ALL = '1';
+
 const SECRET = 'readonly-test-secret-that-is-at-least-thirty-two';
 const VERIFIER = 'r'.repeat(64);
 const CHALLENGE = createHash('sha256').update(VERIFIER).digest('base64url');
@@ -133,6 +136,11 @@ describe('/mcp/readonly with an API key', () => {
     expect(names).not.toContain('prompt_deploy');
   });
 
+  it('leaves /mcp unfiltered for the same key', async () => {
+    setSessionStoreForTests(new InMemorySessionStore());
+    const full = createMcpHandler('https://api.respan.ai', '/.well-known/oauth-protected-resource', 'platform');
+    expect(await toolNames(full, API_KEY, '/mcp')).toContain('prompt_deploy');
+  });
 });
 
 describe('/mcp/readonly with OAuth', () => {
@@ -239,6 +247,25 @@ describe('/mcp/readonly never yields a write token', () => {
       code, codeVerifier: VERIFIER, clientId: 'enc_client', redirectUri: REDIRECT,
       resource: 'https://mcp.respan.ai/mcp/readonly',
     })).rejects.toMatchObject({ oauthError: 'invalid_grant' });
+  });
+
+  it('refuses to refresh a write session for the read-only resource', async () => {
+    const store = new InMemorySessionStore();
+    const backendRefresh = vi.fn();
+    const broker = new OAuthBroker({ config: loadOAuthConfig(process.env), store, fetch: backendRefresh });
+    const pair = await broker.exchangeAuthorizationCode({
+      code: await writeGrant(broker), codeVerifier: VERIFIER, clientId: 'enc_client', redirectUri: REDIRECT,
+    });
+    expect(pair.scope).toBe('mcp:read mcp:write');
+    await expect(broker.refresh({
+      refreshToken: pair.refresh_token, clientId: 'enc_client', resource: 'https://mcp.respan.ai/mcp/readonly',
+    })).rejects.toMatchObject({ oauthError: 'invalid_grant' });
+    expect(backendRefresh).not.toHaveBeenCalled();
+
+    // The write session survives on /mcp.
+    const full = createMcpHandler('https://api.respan.ai', '/.well-known/oauth-protected-resource', 'platform');
+    setSessionStoreForTests(store);
+    expect(await toolNames(full, pair.access_token, '/mcp')).toContain('prompt_deploy');
   });
 
   it('challenges for read scope only on the read-only URL', async () => {

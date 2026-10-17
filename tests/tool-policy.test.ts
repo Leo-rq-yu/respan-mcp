@@ -9,6 +9,9 @@ import { registerDocTools } from '../lib/docs/tools.js';
 import { applyToolPolicy, TOOL_ANNOTATIONS, unannotatedTools } from '../lib/shared/tool-policy.js';
 import handleChallenge from '../api/well-known/openai-apps-challenge.js';
 
+// These tests cover the whole tool surface, not only the tools listed by default.
+process.env.RESPAN_MCP_LIST_ALL = '1';
+
 async function listTools(server: McpServer): Promise<Tool[]> {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await server.connect(serverTransport);
@@ -39,10 +42,38 @@ describe('tool policy', () => {
     expect(unannotatedTools()).toEqual([]);
   });
 
+  it('has no table entries for tools that no longer exist', async () => {
+    const names = new Set([
+      ...(await listTools(createServer(null))).map((tool) => tool.name),
+      ...(await listTools(docsServer())).map((tool) => tool.name),
+    ]);
+    for (const name of Object.keys(TOOL_ANNOTATIONS)) {
+      expect(names.has(resolveToolName(name)), `${name} is in TOOL_ANNOTATIONS but not registered`).toBe(true);
+    }
+  });
+
   it('no longer lists the removed broken tools', async () => {
     const names = (await listTools(createServer(null))).map((tool) => tool.name);
     expect(names).not.toContain('run_evaluator');
     expect(names).not.toContain('deploy_prompt_version');
+  });
+
+  it('marks deletes, overwrites and deploys as destructive and reads as read-only', async () => {
+    const tools = new Map((await listTools(createServer(null))).map((tool) => [tool.name, tool]));
+    for (const name of [
+      'prompt_update', 'monitor_deploy', 'monitor_delete',
+      'prompt_deploy', 'custom_behavior_delete', 'custom_behavior_update',
+    ]) {
+      expect(tools.get(name)?.annotations, name).toMatchObject({ readOnlyHint: false, destructiveHint: true });
+    }
+    for (const name of [
+      'trace_list', 'prompt_get', 'behavior_list', 'error_group_list',
+    ]) {
+      expect(tools.get(name)?.annotations, name).toMatchObject({ readOnlyHint: true, destructiveHint: false });
+    }
+    for (const name of ['prompt_create', 'prompt_commit', 'custom_behavior_create']) {
+      expect(tools.get(name)?.annotations, name).toMatchObject({ readOnlyHint: false, destructiveHint: false });
+    }
   });
 
   it('keeps the respan-enabled-tools filter working', async () => {

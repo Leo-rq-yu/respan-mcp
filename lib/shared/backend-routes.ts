@@ -7,6 +7,10 @@
 
 import type { BackendRoute } from './backend-route.js';
 
+// Resolved by the log list and summary views before ClickHouse; the project
+// comes from the credential.
+const BREAKDOWN_UNSUPPORTED_FILTERS = ['behaviors', 'topics', 'fault_domain', 'messages_smart', 'organization_id', 'unique_organization_id'];
+
 export const BACKEND_ROUTES: Readonly<Record<string, BackendRoute>> = {
   annotation_item_get: { requests: [{ method: 'GET', path: '/api/annotation-items/{item_id}/' }] },
   annotation_item_list: { requests: [{ method: 'POST', path: '/api/annotation-items/list/', query: ['page', 'page_size', 'sort_by'], body: ['filters'] }] },
@@ -17,7 +21,7 @@ export const BACKEND_ROUTES: Readonly<Record<string, BackendRoute>> = {
   api_key_get: { requests: [{ method: 'GET', path: '/api/keys/{key_id}/' }] },
   api_key_list: { requests: [{ method: 'POST', path: '/api/keys/list/', query: ['page', 'page_size', 'sort_by', 'include_revoked', 'group_by'], body: ['filters'] }] },
   api_key_metadata_update: { requests: [{ method: 'PATCH', path: '/api/keys/{key_id}/', body: ['name', 'expiry_date', 'rate_limit', 'spending_limit', 'tpm_rate_limit', 'max_usage'] }] },
-  api_key_usage_list: { requests: [{ method: 'POST', path: '/clickhouse/dashboard/breakdown/', query: ['const:breakdown_by=organization_key_id', 'start_time', 'end_time', 'summary_type', 'date', 'timezone_offset', 'environment', 'credential_type', 'include_all_metrics', 'sort_by', 'limit', 'is_workspace_level', 'workspace'], body: ['filters'] }] },
+  api_key_usage_list: { requests: [{ method: 'POST', path: '/clickhouse/dashboard/breakdown/', query: ['const:breakdown_by=organization_key_id', 'start_time', 'end_time', 'summary_type', 'date', 'timezone_offset', 'environment', 'credential_type', 'include_all_metrics', 'sort_by', 'limit', 'is_workspace_level', 'workspace'], body: ['filters'] }], unsupportedFilters: BREAKDOWN_UNSUPPORTED_FILTERS },
   automation_commit: { requests: [{ method: 'POST', path: '/api/workflows/{automation_id}/commits/', body: ['version_description'] }] },
   automation_create: { requests: [{ method: 'POST', path: '/api/workflows/', body: ['name', 'tasks', 'description', 'trigger_event_type', 'schedule_cron', 'is_starred', 'polarity', 'const:type=automations'] }] },
   automation_delete: { requests: [{ method: 'DELETE', path: '/api/workflows/{automation_id}/' }], destructive: true },
@@ -73,10 +77,10 @@ export const BACKEND_ROUTES: Readonly<Record<string, BackendRoute>> = {
   dataset_log_summary: { requests: [{ method: 'POST', path: '/api/datasets/{dataset_id}/logs/summary/', body: ['filters'] }] },
   dataset_log_update: { requests: [{ method: 'PATCH', path: '/api/datasets/{dataset_id}/logs/{unique_id}/', body: ['input', 'output', 'expected_output', 'metadata', 'metrics', 'variables'] }] },
   dataset_update: { requests: [{ method: 'PATCH', path: '/api/datasets/{dataset_id}/', body: ['name', 'description', 'starred'] }] },
-  deployment_usage_list: { requests: [{ method: 'POST', path: '/clickhouse/dashboard/breakdown/', query: ['const:breakdown_by=deployment_id', 'start_time', 'end_time', 'summary_type', 'date', 'timezone_offset', 'environment', 'credential_type', 'include_all_metrics', 'sort_by', 'limit', 'is_workspace_level', 'workspace'], body: ['filters'] }] },
+  deployment_usage_list: { requests: [{ method: 'POST', path: '/clickhouse/dashboard/breakdown/', query: ['const:breakdown_by=deployment_id', 'start_time', 'end_time', 'summary_type', 'date', 'timezone_offset', 'environment', 'credential_type', 'include_all_metrics', 'sort_by', 'limit', 'is_workspace_level', 'workspace'], body: ['filters'] }], unsupportedFilters: BREAKDOWN_UNSUPPORTED_FILTERS },
   end_user_active_summary: { requests: [{ method: 'POST', path: '/clickhouse/dashboard/users/', query: ['start_time', 'end_time', 'summary_type', 'date', 'timezone_offset', 'time_tick', 'environment', 'is_workspace_level', 'workspace'], body: ['filters'] }] },
   end_user_count: { requests: [{ method: 'POST', path: '/clickhouse/dashboard/total-users/', query: ['start_time', 'end_time', 'summary_type', 'date', 'timezone_offset', 'environment', 'is_workspace_level', 'workspace'] }] },
-  end_user_usage_list: { requests: [{ method: 'POST', path: '/clickhouse/dashboard/breakdown/', query: ['start_time', 'end_time', 'summary_type', 'date', 'timezone_offset', 'environment', 'credential_type', 'sort_by', 'limit', 'include_all_metrics', 'const:breakdown_by=customer_identifier', 'is_workspace_level', 'workspace'], body: ['filters'] }] },
+  end_user_usage_list: { requests: [{ method: 'POST', path: '/clickhouse/dashboard/breakdown/', query: ['start_time', 'end_time', 'summary_type', 'date', 'timezone_offset', 'environment', 'credential_type', 'sort_by', 'limit', 'include_all_metrics', 'const:breakdown_by=customer_identifier', 'is_workspace_level', 'workspace'], body: ['filters'] }], unsupportedFilters: BREAKDOWN_UNSUPPORTED_FILTERS },
   error_group_get: { requests: [{ method: 'POST', path: '/api/pulses/errors/{fingerprint}/', query: ['is_workspace_level', 'workspace'], body: ['start_time', 'end_time', 'environment', 'limit', 'unique_organization_id'] }] },
   error_group_list: { requests: [{ method: 'POST', path: '/api/pulses/errors/', query: ['is_workspace_level', 'workspace'], body: ['start_time', 'end_time', 'environment', 'error_class', 'provider', 'status', 'fault_domain', 'filters'] }] },
   eval_result_summary: { requests: [{ method: 'POST', path: '/clickhouse/dashboard/eval-results/summary/', query: ['start_time', 'end_time', 'summary_type', 'date', 'timezone_offset', 'environment', 'source', 'scope', 'is_workspace_level', 'workspace'] }] },
@@ -159,7 +163,7 @@ export const BACKEND_ROUTES: Readonly<Record<string, BackendRoute>> = {
   model_delete: { requests: [{ method: 'DELETE', path: '/api/models/{model}/' }], destructive: true },
   model_list: { requests: [{ method: 'POST', path: '/api/models/list/', query: ['is_global_only', 'all', 'page', 'page_size', 'sort_by'], body: ['filters'] }] },
   model_update: { requests: [{ method: 'PATCH', path: '/api/models/{model_name}/' }], destructive: true, spread: 'fields' },
-  model_usage_list: { requests: [{ method: 'POST', path: '/clickhouse/dashboard/breakdown/', query: ['start_time', 'end_time', 'summary_type', 'date', 'timezone_offset', 'environment', 'credential_type', 'sort_by', 'limit', 'include_all_metrics', 'const:breakdown_by=model', 'is_workspace_level', 'workspace'], body: ['filters'] }] },
+  model_usage_list: { requests: [{ method: 'POST', path: '/clickhouse/dashboard/breakdown/', query: ['start_time', 'end_time', 'summary_type', 'date', 'timezone_offset', 'environment', 'credential_type', 'sort_by', 'limit', 'include_all_metrics', 'const:breakdown_by=model', 'is_workspace_level', 'workspace'], body: ['filters'] }], unsupportedFilters: BREAKDOWN_UNSUPPORTED_FILTERS },
   monitor_commit: { requests: [{ method: 'POST', path: '/api/workflows/{monitor_id}/commits/', body: ['version_description'] }] },
   monitor_create: { requests: [{ method: 'POST', path: '/api/workflows/', body: ['name', 'tasks', 'description', 'trigger_event_type', 'schedule_cron', 'is_starred', 'polarity', 'const:type=monitors'] }] },
   monitor_delete: { requests: [{ method: 'DELETE', path: '/api/workflows/{monitor_id}/' }], destructive: true },
@@ -191,12 +195,12 @@ export const BACKEND_ROUTES: Readonly<Record<string, BackendRoute>> = {
   prompt_list: { requests: [{ method: 'POST', path: '/api/prompts/list/', query: ['page', 'page_size', 'sort_by'], body: ['filters'] }] },
   prompt_trash_restore: { requests: [{ method: 'POST', path: '/api/prompts/backups/', body: ['prompt_id'] }], destructive: true },
   prompt_update: { requests: [{ method: 'PATCH', path: '/api/prompts/{prompt_id}/', body: ['name', 'description'] }], destructive: true },
-  prompt_usage_list: { requests: [{ method: 'POST', path: '/clickhouse/dashboard/breakdown/', query: ['const:breakdown_by=prompt_id', 'start_time', 'end_time', 'summary_type', 'date', 'timezone_offset', 'environment', 'credential_type', 'include_all_metrics', 'sort_by', 'limit', 'is_workspace_level', 'workspace'], body: ['filters'] }] },
+  prompt_usage_list: { requests: [{ method: 'POST', path: '/clickhouse/dashboard/breakdown/', query: ['const:breakdown_by=prompt_id', 'start_time', 'end_time', 'summary_type', 'date', 'timezone_offset', 'environment', 'credential_type', 'include_all_metrics', 'sort_by', 'limit', 'is_workspace_level', 'workspace'], body: ['filters'] }], unsupportedFilters: BREAKDOWN_UNSUPPORTED_FILTERS },
   prompt_version_get: { requests: [{ method: 'GET', path: '/api/prompts/{prompt_id}/versions/{version}/' }] },
   prompt_version_list: { requests: [{ method: 'GET', path: '/api/prompts/{prompt_id}/versions/', query: ['page', 'page_size'] }] },
   prompt_version_update: { requests: [{ method: 'PATCH', path: '/api/prompts/{prompt_id}/versions/{version}/', body: ['messages', 'description', 'model', 'temperature', 'max_tokens', 'top_p', 'frequency_penalty', 'presence_penalty', 'stream', 'variables', 'fallback_models', 'load_balance_models', 'tools', 'tool_choice', 'response_format', 'reasoning_effort', 'seed', 'thinking', 'verbosity', 'json_schema', 'is_enforcing_response_format'] }], destructive: true },
   provider_list: { requests: [{ method: 'GET', path: '/llm_models/providers/', query: ['page', 'page_size'] }] },
-  provider_usage_list: { requests: [{ method: 'POST', path: '/clickhouse/dashboard/breakdown/', query: ['const:breakdown_by=provider_id', 'start_time', 'end_time', 'summary_type', 'date', 'timezone_offset', 'environment', 'credential_type', 'include_all_metrics', 'sort_by', 'limit', 'is_workspace_level', 'workspace'], body: ['filters'] }] },
+  provider_usage_list: { requests: [{ method: 'POST', path: '/clickhouse/dashboard/breakdown/', query: ['const:breakdown_by=provider_id', 'start_time', 'end_time', 'summary_type', 'date', 'timezone_offset', 'environment', 'credential_type', 'include_all_metrics', 'sort_by', 'limit', 'is_workspace_level', 'workspace'], body: ['filters'] }], unsupportedFilters: BREAKDOWN_UNSUPPORTED_FILTERS },
   redteam_campaign_get: { requests: [{ method: 'GET', path: '/redteam/campaigns/{campaign_id}/' }] },
   redteam_campaign_list: { requests: [{ method: 'GET', path: '/redteam/campaigns/', query: ['page', 'page_size'] }] },
   redteam_event_list: { requests: [{ method: 'GET', path: '/redteam/campaigns/{campaign_id}/events/', query: ['page', 'page_size'] }] },

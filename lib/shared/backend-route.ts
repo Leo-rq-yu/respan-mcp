@@ -38,6 +38,8 @@ export interface BackendRoute {
   json?: readonly string[];
   /** An argument whose object is the whole body. */
   spread?: string;
+  /** `filters` fields the endpoint cannot compile: it 500s or matches nothing, so they are refused. */
+  unsupportedFilters?: readonly string[];
 }
 
 const PLACEHOLDER = /\{([a-z0-9_]+)\}/g;
@@ -78,6 +80,13 @@ export function forwardedArgs(route: BackendRoute): Set<string> {
 
 /** The request `args` select, as the backend executor would send it. */
 export function buildRequest(route: BackendRoute, args: Record<string, unknown>) {
+  const filters = args.filters;
+  const refused = route.unsupportedFilters && filters && typeof filters === 'object'
+    ? Object.keys(filters).filter((field) => route.unsupportedFilters!.includes(field)).sort()
+    : [];
+  if (refused.length) {
+    throw new Error(`Cannot filter by ${refused.join(', ')} here. Use log_list for behaviors, topics, fault_domain or messages_smart; the project comes from your credential.`);
+  }
   const request = route.requests.find((candidate) => !candidate.when || isPresent(args[candidate.when]));
   if (!request) throw new Error(`Provide one of: ${route.requests.map((candidate) => candidate.when).join(', ')}.`);
   const wire = (key: string) => route.renames?.[key] ?? key;

@@ -14,7 +14,9 @@ export async function currentOrganization(client: AuthenticatedClient): Promise<
 export function registerBehaviorSettings(server: McpServer, client: AuthenticatedClient | null) {
   registerBackendTool(server, client, 'behavior_disabled_set', DESTRUCTIVE_TOOL, async (c, args) => {
     const org = await currentOrganization(c);
-    return rawFetch(c, `/user/organization/${encodeURIComponent(String(org.unique_organization_id))}/`, {
+    const id = org.unique_organization_id;
+    if (typeof id !== 'string' || !id) throw new Error('Current project has no identifier; no settings were changed.');
+    return rawFetch(c, `/user/organization/${encodeURIComponent(id)}/`, {
       method: 'PATCH', body: { disabled_span_behaviors: args.disabled_span_behaviors },
     });
   });

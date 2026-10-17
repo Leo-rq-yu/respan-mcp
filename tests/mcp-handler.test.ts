@@ -154,6 +154,89 @@ describe('MCP authentication boundary', () => {
     expect(store.operations).toBe(0);
   });
 
+  it('keeps a direct-login backend JWT on the zero-store API-key path', async () => {
+    const store = new InMemorySessionStore();
+    setSessionStoreForTests(store);
+    const directLoginAccess = jwt('direct-login-access');
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(
+      JSON.stringify({ results: [], count: 0 }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    ));
+    const handler = createMcpHandler(
+      'https://api.respan.ai',
+      '/.well-known/oauth-protected-resource',
+      'platform',
+    );
+    const response = new MockResponse();
+    await handler(request(directLoginAccess, 'tools/call', {
+      name: 'log_list',
+      arguments: { page_size: 1, page: 1, start_time: '2026-10-01T00:00:00Z', end_time: '2026-10-02T00:00:00Z' },
+    }), response as any);
+
+    expect(response.statusCode).toBe(200);
+    expect(store.operations).toBe(0);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const outboundHeaders = new Headers(fetchMock.mock.calls[0][1]?.headers);
+    expect(outboundHeaders.get('authorization')).toBe(
+      `Bearer ${directLoginAccess}`,
+    );
+  });
+
+  it('normalizes a configured /api suffix on the zero-store API-key path', async () => {
+    process.env.RESPAN_API_BASE_URL = 'http://127.0.0.1:8000/api';
+    const store = new InMemorySessionStore();
+    setSessionStoreForTests(store);
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(
+      JSON.stringify({ results: [], count: 0 }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    ));
+    const handler = createMcpHandler(
+      'https://api.respan.ai',
+      '/.well-known/oauth-protected-resource',
+      'platform',
+    );
+    const response = new MockResponse();
+    await handler(request('sk-respan-realistic-api-key', 'tools/call', {
+      name: 'log_list',
+      arguments: { page_size: 1, page: 1, start_time: '2026-10-01T00:00:00Z', end_time: '2026-10-02T00:00:00Z' },
+    }), response as any);
+
+    expect(response.statusCode).toBe(200);
+    expect(store.operations).toBe(0);
+    expect(String(fetchMock.mock.calls[0][0])).toMatch(
+      /^http:\/\/127\.0\.0\.1:8000\/clickhouse\/request-logs\//,
+    );
+    expect(String(fetchMock.mock.calls[0][0])).not.toContain('/api/api/');
+  });
+
+  it('never combines a fallback API key with a caller-provided backend URL', async () => {
+    process.env.RESPAN_API_KEY = 'server-fallback-secret';
+    const store = new InMemorySessionStore();
+    setSessionStoreForTests(store);
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(
+      JSON.stringify({ results: [], count: 0 }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    ));
+    const handler = createMcpHandler(
+      'https://api.respan.ai',
+      '/.well-known/oauth-protected-resource',
+      'platform',
+    );
+    const maliciousRequest = request('unused', 'tools/call', {
+      name: 'log_list',
+      arguments: { page_size: 1, page: 1, start_time: '2026-10-01T00:00:00Z', end_time: '2026-10-02T00:00:00Z' },
+    });
+    delete maliciousRequest.headers.authorization;
+    maliciousRequest.headers['respan-api-base-url'] = 'https://attacker.example/api';
+    const response = new MockResponse();
+    await handler(maliciousRequest, response as any);
+
+    expect(response.statusCode).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0][0])).toMatch(/^https:\/\/api\.respan\.ai\//);
+    expect(String(fetchMock.mock.calls[0][0])).not.toContain('attacker.example');
+  });
+
   it('rejects an unconfigured backend target even with a supplied API key', async () => {
     const store = new InMemorySessionStore();
     setSessionStoreForTests(store);
@@ -203,4 +286,98 @@ describe('MCP authentication boundary', () => {
     expect(response.getHeader('www-authenticate')).toBeUndefined();
   });
 
+  it('forwards the decrypted backend JWT, never the inbound MCP token', async () => {
+    const store = new InMemorySessionStore();
+    setSessionStoreForTests(store);
+    const { pair } = await issuePair(store);
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(
+      JSON.stringify({ results: [], count: 0 }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    ));
+    const handler = createMcpHandler(
+      'https://api.respan.ai',
+      '/.well-known/oauth-protected-resource',
+      'platform',
+    );
+    const response = new MockResponse();
+    await handler(request(pair.access_token, 'tools/call', {
+      name: 'log_list',
+      arguments: { page_size: 1, page: 1, start_time: '2026-10-01T00:00:00Z', end_time: '2026-10-02T00:00:00Z' },
+    }), response as any);
+    expect(response.statusCode).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const outboundHeaders = new Headers(fetchMock.mock.calls[0][1]?.headers);
+    const outbound = outboundHeaders.get('authorization');
+    expect(outbound).toMatch(/^Bearer eyJ/);
+    expect(outbound).not.toContain(pair.access_token);
+    expect(String(response.body)).not.toContain('eyJ');
+  });
+
+  it('uses an enterprise session only on the enterprise MCP backend', async () => {
+    const store = new InMemorySessionStore();
+    setSessionStoreForTests(store);
+    const { pair } = await issuePair(store, 'enterprise');
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(
+      JSON.stringify({ results: [], count: 0 }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    ));
+    const enterpriseHandler = createMcpHandler(
+      'https://endpoint.respan.ai',
+      '/.well-known/oauth-protected-resource/enterprise',
+      'enterprise',
+    );
+    const enterpriseResponse = new MockResponse();
+    await enterpriseHandler(request(pair.access_token, 'tools/call', {
+      name: 'log_list',
+      arguments: { page_size: 1, page: 1, start_time: '2026-10-01T00:00:00Z', end_time: '2026-10-02T00:00:00Z' },
+    }), enterpriseResponse as any);
+
+    expect(enterpriseResponse.statusCode).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0][0])).toMatch(
+      /^https:\/\/endpoint\.respan\.ai\/clickhouse\/request-logs\//,
+    );
+    const outboundHeaders = new Headers(fetchMock.mock.calls[0][1]?.headers);
+    expect(outboundHeaders.get('authorization')).toMatch(/^Bearer eyJ/);
+    expect(outboundHeaders.get('authorization')).not.toContain(pair.access_token);
+
+    const platformHandler = createMcpHandler(
+      'https://api.respan.ai',
+      '/.well-known/oauth-protected-resource',
+      'platform',
+    );
+    const platformResponse = new MockResponse();
+    await platformHandler(request(pair.access_token), platformResponse as any);
+    expect(platformResponse.statusCode).toBe(401);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('deletes only access and returns top-level 401 on backend rejection', async () => {
+    const store = new InMemorySessionStore();
+    setSessionStoreForTests(store);
+    const { broker, pair } = await issuePair(store);
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(
+      JSON.stringify({ detail: 'unauthorized' }),
+      { status: 401, headers: { 'Content-Type': 'application/json' } },
+    ));
+    const handler = createMcpHandler(
+      'https://api.respan.ai',
+      '/.well-known/oauth-protected-resource',
+      'platform',
+    );
+    const response = new MockResponse();
+    await handler(request(pair.access_token, 'tools/call', {
+      name: 'log_list',
+      arguments: { page_size: 1, page: 1, start_time: '2026-10-01T00:00:00Z', end_time: '2026-10-02T00:00:00Z' },
+    }), response as any);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(response.statusCode).toBe(401);
+    await expect(
+      broker.resolveAccessToken('platform', pair.access_token),
+    ).rejects.toThrow('Invalid MCP access token');
+    expect(await store.getRefreshSession(
+      'platform',
+      hashOpaqueToken(pair.refresh_token),
+    )).not.toBeNull();
+  });
 });
