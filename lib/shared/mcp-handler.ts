@@ -7,6 +7,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { RespanClient } from '@respan/respan-api';
 import type { AuthenticatedClient } from './client.js';
 import { registerProductionTools } from '../production/index.js';
+import { registerGuardrailTools } from '../pulses/guardrails.js';
 import { registerPulseTools } from '../pulses/index.js';
 import { registerPromptTools } from '../develop/prompts.js';
 import { registerOrganizationTools } from '../account/organizations.js';
@@ -66,6 +67,7 @@ export function createServer(
 
   registerProductionTools(server, client);
   registerPulseTools(server, client);
+  registerGuardrailTools(server, client);
   registerPromptTools(server, client);
   registerMonitorTools(server, client);
   registerOrganizationTools(server, client);

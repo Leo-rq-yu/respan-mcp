@@ -109,8 +109,9 @@ Share this config with your team:
 
 ## Product tools
 
-The platform server exposes eight feature categories: traces, logs, behaviors,
-errors, metrics, monitors, prompts, and workspace. Public docs search is separate.
+The platform server exposes nine feature categories: traces, logs, behaviors,
+errors, guardrails, metrics, monitors, prompts, and workspace. Public docs search
+is separate.
 Custom behavior definitions belong to Behaviors; notification destinations belong
 to Monitors. Application conversations are inspected through request/trace tools
 rather than a separate conversation product.
@@ -142,6 +143,11 @@ Monitors check resource type before writing and preserve complete content,
 including stored webhook secrets, when a committed family needs a new draft.
 Secrets are omitted from results. Alert history counts delivered notifications,
 not every execution; an empty history is not evidence of inactivity.
+
+Guardrails are read-only: totals, outcomes over time and blocked requests by
+dimension accept an API key; `guardrail_list` (the catalog, which guardrails are
+on, and PII redaction settings) requires OAuth. Nothing turns a guardrail on or
+off.
 
 Workspace identity/selection and behavior detection settings require OAuth.
 Behavior settings writes resolve their target from the current session and replace
@@ -199,7 +205,8 @@ respan-mcp/
 │   │   ├── threads.ts        # legacy module, not publicly registered
 │   │   └── metrics.ts        # metric summaries, grouped rankings, user usage
 │   ├── pulses/
-│   │   └── index.ts          # behaviors, error issues, incidents
+│   │   ├── index.ts          # behaviors, error issues, incidents
+│   │   └── guardrails.ts     # guardrail_summary, guardrail_timeseries, guardrail_grouped, guardrail_list
 │   ├── account/
 │   │   └── organizations.ts  # workspace identity and selection
 │   └── develop/
