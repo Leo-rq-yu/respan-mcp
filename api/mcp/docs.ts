@@ -2,6 +2,11 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createDocsServer } from '../../lib/docs/tools.js';
 import { rewriteToolCallNames } from '../../lib/shared/tool-aliases.js';
+import {
+  noteAliasedCalls,
+  recordRequest,
+  telemetryContext,
+} from '../../lib/shared/telemetry.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0, s-maxage=0');
@@ -24,7 +29,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const server = createDocsServer();
+// The docs server needs no credential, so every caller counts as 'none'.
+    const telemetry = telemetryContext('docs', undefined, req.headers, false);
+    const server = createDocsServer(telemetry);
 
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
@@ -32,12 +39,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     await server.connect(transport);
 
-    rewriteToolCallNames(req.body);
+    noteAliasedCalls(telemetry, req.body);
+    const renamedTools = rewriteToolCallNames(req.body);
     await transport.handleRequest(
       req as any,
       res as any,
       req.body,
     );
+    recordRequest(server, telemetry, req.body, renamedTools, res.statusCode < 400);
   } catch (error) {
     console.error('Docs MCP Handler error:', error);
 
